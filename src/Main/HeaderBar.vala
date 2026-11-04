@@ -1,169 +1,148 @@
 public class Main.HeaderBar : Gtk.HeaderBar {
-    public Main.Window window { get; construct;}
+    public Main.Window window { get; construct; }
     public Gtk.SearchEntry searchEntry;
+    private Granite.Widgets.ModeButton statusFilter;
 
     public HeaderBar (Main.Window window) {
-        Object (
-            window: window
-        );
+        Object (window: window);
     }
 
     construct {
         show_close_button = true;
-        Gtk.Button open = new Gtk.Button.from_icon_name("document-open", Gtk.IconSize.LARGE_TOOLBAR );
-        open.clicked.connect (() => { this.file (); });
-        Gtk.Button magnet = new Gtk.Button.from_icon_name("open-magnet", Gtk.IconSize.LARGE_TOOLBAR );
-        magnet.clicked.connect (() => { this.magnet (); });
+        title = "Torrential Remote";
 
-        Granite.ModeSwitch toggle = new Granite.ModeSwitch.from_icon_name("display-brightness-symbolic", "weather-clear-night-symbolic");
-        toggle.bind_property ("active", window, "dark_theme");
-        toggle.active = window.dark_theme;
-        toggle.primary_icon_tooltip_text = "Light theme";
-		toggle.secondary_icon_tooltip_text = "Dark theme";
-        toggle.valign = Gtk.Align.CENTER;
-        toggle.notify.connect(() => {
-            Gtk.Settings.get_default ().gtk_application_prefer_dark_theme = toggle.active;
-        });
+        Gtk.Button open_button = new Gtk.Button.from_icon_name ("document-open-symbolic", Gtk.IconSize.BUTTON);
+        open_button.tooltip_text = "Add a torrent file";
+        open_button.get_style_context ().add_class ("flat");
+        open_button.clicked.connect (open_torrent_file);
+        pack_start (open_button);
+
+        Gtk.Button magnet_button = new Gtk.Button.from_icon_name ("insert-link-symbolic", Gtk.IconSize.BUTTON);
+        magnet_button.tooltip_text = "Add a magnet link";
+        magnet_button.get_style_context ().add_class ("flat");
+        magnet_button.clicked.connect (open_magnet_dialog);
+        pack_start (magnet_button);
+
+        statusFilter = new Granite.Widgets.ModeButton ();
+        statusFilter.append_text ("All");
+        statusFilter.append_text ("Downloading");
+        statusFilter.append_text ("Seeding");
+        statusFilter.append_text ("Paused");
+        statusFilter.selected = 0;
+        statusFilter.notify["selected"].connect (apply_filter);
+        set_custom_title (statusFilter);
 
         searchEntry = new Gtk.SearchEntry ();
         searchEntry.placeholder_text = "Search Torrents";
-        searchEntry.search_changed.connect (() => {
-            if (searchEntry.text != "") {
-                (window.torrents as Gtk.ListBox).set_filter_func ((item) => {
-                    return (item as Torrent.Row).title.label.casefold ().contains (searchEntry.text.casefold ());
-                });              
-            } else {
-                (window.torrents as Gtk.ListBox).invalidate_filter ();
-            }
-        });
+        searchEntry.width_chars = 18;
+        searchEntry.search_changed.connect (apply_filter);
+        pack_end (searchEntry);
+    }
 
-        Granite.Widgets.ModeButton sort = new Granite.Widgets.ModeButton ();
-        sort.margin = 1;
-        sort.margin_right = 20;
-        sort.append_text ("All");
-        sort.append_text ("Downloading");
-        sort.append_text ("Seeding");
-        sort.append_text ("Paused");
-        sort.selected = 0;
+    private void apply_filter () {
+        if (window.torrents == null)
+            return;
 
-        sort.notify["selected"].connect (() => {
-            switch (sort.selected) {
-                case 0: //ALL
-                    (window.torrents as Gtk.ListBox).set_filter_func (null);
+        string query = searchEntry.text.strip ().casefold ();
+        int selected_status = statusFilter.selected;
+        window.torrents.set_filter_func ((row) => {
+            Torrent.Row torrent_row = row as Torrent.Row;
+            if (torrent_row == null)
+                return false;
+
+            bool matches_query = query == "" || torrent_row.title.label.casefold ().contains (query);
+            bool matches_status = true;
+            switch (selected_status) {
+                case 1:
+                    matches_status = torrent_row.status == Torrent.Statuses.DOWNLOAD ||
+                        torrent_row.status == Torrent.Statuses.DOWNLOAD_WAIT;
                     break;
-                case 1: //DOWNLOADING
-                    (window.torrents as Gtk.ListBox).set_filter_func ((item) => {
-                        return (item as Torrent.Row).status == Torrent.Statuses.DOWNLOAD;
-                    });
+                case 2:
+                    matches_status = torrent_row.status == Torrent.Statuses.SEED ||
+                        torrent_row.status == Torrent.Statuses.SEED_WAIT;
                     break;
-                case 2: //SEEDING
-                    (window.torrents as Gtk.ListBox).set_filter_func ((item) => {
-                        return (item as Torrent.Row).status == Torrent.Statuses.SEED;
-                    });
-                    break;
-                case 3: //PAUSED
-                    (window.torrents as Gtk.ListBox).set_filter_func ((item) => {
-                        return (item as Torrent.Row).status == Torrent.Statuses.STOPPED;
-                    });
+                case 3:
+                    matches_status = torrent_row.status == Torrent.Statuses.STOPPED;
                     break;
                 default:
                     break;
-                }
-            warning ("clicked: %i", sort.selected);
-        });
-
-        set_custom_title (sort);
-        pack_end(toggle);
-        pack_end (searchEntry);
-        pack_start(open);
-        pack_start(magnet);
-    }
-
-    private void file () {
-        File file = null;
-        Gtk.FileFilter allFiles = new Gtk.FileFilter ();
-        allFiles.set_filter_name ("All files");
-        allFiles.add_pattern ("*");
-        Gtk.FileFilter torrentFiles = new Gtk.FileFilter ();
-        torrentFiles.set_filter_name ("Torrent files");
-        torrentFiles.add_mime_type ("application/x-bittorrent");
-        
-        Gtk.FileChooserDialog chooser = new Gtk.FileChooserDialog (
-            null,
-            this.window, 
-            Gtk.FileChooserAction.OPEN,
-            "_Cancel",
-            Gtk.ResponseType.CANCEL,
-            "_Open",
-            Gtk.ResponseType.ACCEPT
-        );
-        chooser.set_select_multiple (false);
-        chooser.add_filter (torrentFiles);
-        chooser.add_filter (allFiles);
-        chooser.run ();
-        chooser.close ();
-
-        if (chooser.get_file () != null) {
-            file = chooser.get_file ();
-
-            try {
-                uint8[] contents;
-                string etag_out;
-                file.load_contents (null, out contents, out etag_out);
-                Client.Model client = new Client.Model(window.selectedServer);
-                client.addFromFile (contents);
-            } catch (Error e) {
-                stdout.printf ("Error: %s\n", e.message);
             }
-        }
+            return matches_query && matches_status;
+        });
+        window.torrents.invalidate_filter ();
     }
 
-    private void magnet () {
-        Gtk.DialogFlags flags = Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT;
-        Gtk.Dialog dialog = new Gtk.Dialog.with_buttons (
-            null, 
-            this.window,
-            flags,
-            "Cancel",
-            Gtk.ResponseType.CANCEL,
-            "OK",
-            Gtk.ResponseType.OK, 
+    private void show_error (string message) {
+        Gtk.MessageDialog dialog = new Gtk.MessageDialog (
+            window, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
+            Gtk.ButtonsType.CLOSE, "%s", message
+        );
+        dialog.run ();
+        dialog.destroy ();
+    }
+
+    private void open_torrent_file () {
+        Gtk.FileChooserDialog chooser = new Gtk.FileChooserDialog (
+            "Add Torrent", window, Gtk.FileChooserAction.OPEN,
+            "_Cancel", Gtk.ResponseType.CANCEL,
+            "_Open", Gtk.ResponseType.ACCEPT,
             null
         );
+        chooser.set_select_multiple (false);
+        Gtk.FileFilter torrent_filter = new Gtk.FileFilter ();
+        torrent_filter.set_filter_name ("Torrent files");
+        torrent_filter.add_mime_type ("application/x-bittorrent");
+        chooser.add_filter (torrent_filter);
 
+        if (chooser.run () == Gtk.ResponseType.ACCEPT) {
+            try {
+                uint8[] contents;
+                string etag;
+                chooser.get_file ().load_contents (null, out contents, out etag);
+                Client.Model client = new Client.Model (window.selectedServer);
+                if (!client.add_from_file (contents))
+                    show_error (client.last_error);
+                else
+                    window.torrents.refresh_now ();
+            } catch (Error error) {
+                show_error (error.message);
+            }
+        }
+        chooser.destroy ();
+    }
+
+    private void open_magnet_dialog () {
+        Gtk.Dialog dialog = new Gtk.Dialog.with_buttons (
+            "Add Magnet Link", window, Gtk.DialogFlags.MODAL,
+            "_Cancel", Gtk.ResponseType.CANCEL,
+            "_Add", Gtk.ResponseType.OK,
+            null
+        );
         Gtk.Entry entry = new Gtk.Entry ();
+        entry.placeholder_text = "magnet:?xt=urn:btih:…";
+        entry.activates_default = true;
+        dialog.get_content_area ().set_spacing (12);
+        dialog.get_content_area ().set_border_width (12);
+        dialog.get_content_area ().pack_start (new Gtk.Label ("Magnet link:"), false, false, 0);
+        dialog.get_content_area ().pack_start (entry, false, false, 0);
+        dialog.set_default_response (Gtk.ResponseType.OK);
+        dialog.set_response_sensitive (Gtk.ResponseType.OK, false);
         entry.changed.connect (() => {
-            // Only allow OK when there's text in the box.
-            dialog.set_response_sensitive (Gtk.ResponseType.OK, entry.text.strip () != "");
+            dialog.set_response_sensitive (Gtk.ResponseType.OK, entry.text.strip ().has_prefix ("magnet:?"));
         });
 
-        dialog.width_request = 500;
-        dialog.get_content_area ().spacing = 7;
-        dialog.get_content_area ().border_width = 10;
-        dialog.get_content_area ().pack_start (new Gtk.Label ("Magnet URL:"));
-        dialog.get_content_area ().pack_start (entry);
-        dialog.get_widget_for_response (Gtk.ResponseType.OK).can_default = true;
-        dialog.set_default_response (Gtk.ResponseType.OK);
+        string? clipboard_text = Gtk.Clipboard.get (Gdk.SELECTION_CLIPBOARD).wait_for_text ();
+        if (clipboard_text != null && clipboard_text.has_prefix ("magnet:?"))
+            entry.text = clipboard_text;
 
         dialog.show_all ();
-
-        var clipboard = Gtk.Clipboard.get (Gdk.SELECTION_CLIPBOARD);
-        string? contents = clipboard.wait_for_text ();
-        if (contents != null || contents != "") {
-            entry.text = contents;
+        if (dialog.run () == Gtk.ResponseType.OK) {
+            Client.Model client = new Client.Model (window.selectedServer);
+            if (!client.add_from_magnet (entry.text.strip ()))
+                show_error (client.last_error);
+            else
+                window.torrents.refresh_now ();
         }
-
-        entry.activates_default = true;
-        entry.select_region (0, -1);
-
-        dialog.set_response_sensitive (Gtk.ResponseType.OK, entry.text.strip () != "");
-
-        int response = dialog.run ();
-        if (response == Gtk.ResponseType.OK) {
-            Client.Model client = new Client.Model(window.server);
-            client.addFromMagnet (entry.text);
-        }
-
         dialog.destroy ();
     }
 }
