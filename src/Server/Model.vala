@@ -10,6 +10,7 @@ public class Server.Model : Object {
     public string sessionId { get; set; default = ""; }
     // auto | transmission | deluge
     public string protocol { get; set; default = "auto"; }
+    public bool is_default { get; set; default = false; }
 
     public Model () {
     }

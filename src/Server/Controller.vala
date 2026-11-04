@@ -27,15 +27,69 @@ class Server.Controller : Object {
         return read_servers ();
     }
 
+    public Server.Model? default_server () {
+        foreach (Server.Model server in read_servers ()) {
+            if (server.is_default)
+                return server;
+        }
+        return null;
+    }
+
     public bool save (Server.Model server) {
         Gee.ArrayList<Server.Model> servers = read_servers ();
-        servers.add (server);
+        bool first_server = servers.size == 0;
+        bool replaced = false;
+        foreach (Server.Model existing in servers) {
+            if (existing.equals (server)) {
+                existing.name = server.name;
+                existing.host = server.host;
+                existing.port = server.port;
+                existing.path = server.path;
+                existing.user = server.user;
+                existing.pass = server.pass;
+                existing.protocol = server.protocol;
+                existing.auto = server.auto;
+                if (server.is_default) {
+                    foreach (Server.Model item in servers)
+                        item.is_default = item == existing;
+                }
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced)
+            servers.add (server);
+
+        if (first_server)
+            server.is_default = true;
+        if (server.is_default) {
+            foreach (Server.Model item in servers)
+                item.is_default = item.equals (server);
+        }
         return write_servers (servers);
+    }
+
+    public bool set_default (Server.Model server) {
+        Gee.ArrayList<Server.Model> servers = read_servers ();
+        bool found = false;
+        foreach (Server.Model item in servers) {
+            item.is_default = item.equals (server);
+            found = found || item.is_default;
+        }
+        if (!found)
+            return false;
+        bool saved = write_servers (servers);
+        if (saved)
+            server.is_default = true;
+        return saved;
     }
 
     public bool delete (Server.Model server) {
         Gee.ArrayList<Server.Model> servers = read_servers ();
+        bool removed_default = server.is_default;
         servers.remove (server);
+        if (removed_default && servers.size > 0)
+            servers[0].is_default = true;
         return write_servers (servers);
     }
 
@@ -61,6 +115,7 @@ class Server.Controller : Object {
                 if (data.has_member ("url")) server.url = data.get_string_member ("url");
                 if (data.has_member ("sessionId")) server.sessionId = data.get_string_member ("sessionId");
                 if (data.has_member ("protocol")) server.protocol = data.get_string_member ("protocol");
+                if (data.has_member ("is_default")) server.is_default = data.get_boolean_member ("is_default");
                 servers.add (server);
             }
         } catch (Error error) {
