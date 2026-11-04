@@ -4,110 +4,86 @@ class Server.Controller : Object {
     string configLocation;
 
     construct {
-        configLocation = GLib.Environment.get_user_config_dir() + "/com.github.popvladaurel.torrential-remote";
-        configFolder = File.new_for_path(configLocation);
+        configLocation = GLib.Environment.get_user_config_dir () + "/com.github.popvladaurel.torrential-remote";
+        configFolder = File.new_for_path (configLocation);
         if (!configFolder.query_exists ()) {
-            configFolder.make_directory(); 
+            try {
+                configFolder.make_directory_with_parents ();
+            } catch (Error error) {
+                warning ("Could not create the server configuration directory: %s", error.message);
+            }
         }
-        
         serversFile = configFolder.get_child ("servers.json");
         if (!serversFile.query_exists ()) {
-            serversFile.create (FileCreateFlags.NONE);
+            try {
+                serversFile.create (FileCreateFlags.NONE).close ();
+            } catch (Error error) {
+                warning ("Could not create server configuration file: %s", error.message);
+            }
         }
     }
 
     public Gee.ArrayList<Server.Model> all () {
-        return readServers ();
-    }
-
-    public void show () {
-
-    }
-
-    public void create () {
-
+        return read_servers ();
     }
 
     public bool save (Server.Model server) {
-        Gee.ArrayList<Server.Model> serversList = readServers ();
-        serversList.add (server);
-        return writeServers (serversList);
-    }
-
-    public void edit () {
-
-    }
-
-    public void update () {
-
+        Gee.ArrayList<Server.Model> servers = read_servers ();
+        servers.add (server);
+        return write_servers (servers);
     }
 
     public bool delete (Server.Model server) {
-        Gee.ArrayList<Server.Model> serversList = readServers ();
-        int size = serversList.size;
-        bool contains = serversList.contains (server);
-        serversList.remove(server);
-        size = serversList.size;
-
-        return writeServers (serversList);
+        Gee.ArrayList<Server.Model> servers = read_servers ();
+        servers.remove (server);
+        return write_servers (servers);
     }
 
-    private Gee.ArrayList<Server.Model> readServers () {
-        Gee.ArrayList<Server.Model> serversList = new Gee.ArrayList<Server.Model> ((Gee.EqualDataFunc) Server.Model.equals);
-
+    private Gee.ArrayList<Server.Model> read_servers () {
+        Gee.ArrayList<Server.Model> servers = new Gee.ArrayList<Server.Model> ((Gee.EqualDataFunc) Server.Model.equals);
         try {
-            Json.Parser jsonParser = new Json.Parser ();
-            jsonParser.load_from_stream (serversFile.read ());
-            Json.Node? jsonNode = jsonParser.get_root ();
-            Json.Array? jsonArray = jsonNode.get_array ();
-            foreach (Json.Node serverJson in jsonArray.get_elements ()) {
+            Json.Parser parser = new Json.Parser ();
+            parser.load_from_stream (serversFile.read ());
+            Json.Node? root = parser.get_root ();
+            if (root == null || root.get_node_type () != Json.NodeType.ARRAY)
+                return servers;
+            foreach (Json.Node node in root.get_array ().get_elements ()) {
+                if (node.get_node_type () != Json.NodeType.OBJECT)
+                    continue;
+                Json.Object data = node.get_object ();
                 Server.Model server = new Server.Model ();
-                Json.Reader jsonReader = new Json.Reader (serverJson);
-                foreach (string serverProperty in jsonReader.list_members ()) {
-                    //TODO this switch can be replaced with Json.gobject_deserialize 
-                    switch (serverProperty) {
-                        case "name":
-                        case "host":
-                        case "post":
-                        case "path":
-                        case "user":
-                        case "pass":
-                        case "url":
-                            if (jsonReader.read_member (serverProperty) == true && jsonReader.is_value ()) {
-                                server.@set (serverProperty, jsonReader.get_string_value ());
-                                jsonReader.end_member ();
-                            }
-                            break;
-                    default:
-                        break;
-                    }
-                }
-                jsonReader.end_member ();
-                serversList.add (server);
-            }   
-        } catch (Error e) {
-            warning ("Unable to parse `%s': %s\n", serversFile.get_basename (), e.message);
+                if (data.has_member ("name")) server.name = data.get_string_member ("name");
+                if (data.has_member ("host")) server.host = data.get_string_member ("host");
+                if (data.has_member ("port")) server.port = data.get_string_member ("port");
+                if (data.has_member ("path")) server.path = data.get_string_member ("path");
+                if (data.has_member ("user")) server.user = data.get_string_member ("user");
+                if (data.has_member ("pass")) server.pass = data.get_string_member ("pass");
+                if (data.has_member ("url")) server.url = data.get_string_member ("url");
+                if (data.has_member ("sessionId")) server.sessionId = data.get_string_member ("sessionId");
+                if (data.has_member ("protocol")) server.protocol = data.get_string_member ("protocol");
+                servers.add (server);
+            }
+        } catch (Error error) {
+            warning ("Unable to read '%s': %s", serversFile.get_basename (), error.message);
         }
-
-        return serversList;
+        return servers;
     }
 
-    private bool writeServers (Gee.ArrayList<Server.Model> serversList) {
+    private bool write_servers (Gee.ArrayList<Server.Model> servers) {
         Json.Builder builder = new Json.Builder ();
         builder.begin_array ();
-
-        serversList.foreach ((server) => {
-            Json.Node node = Json.gobject_serialize (server);
-            builder.add_value (node);
-            return true;
-        });
-
+        foreach (Server.Model server in servers)
+            builder.add_value (Json.gobject_serialize (server));
         builder.end_array ();
-
         Json.Generator generator = new Json.Generator ();
         generator.set_root (builder.get_root ());
         generator.pretty = true;
-
-        return generator.to_file (serversFile.get_path ());
+        try {
+            generator.to_file (serversFile.get_path ());
+            return true;
+        } catch (Error error) {
+            warning ("Unable to save server configuration: %s", error.message);
+            return false;
+        }
     }
 }

@@ -8,15 +8,15 @@ public class Server.Model : Object {
     public bool auto { get; set; default = false; }
     public string url { get; set; default = ""; }
     public string sessionId { get; set; default = ""; }
+    // auto | transmission | deluge
+    public string protocol { get; set; default = "auto"; }
 
-    // Do not connect during construction: this class is also used to load saved
-    // settings, and constructing a model must not trigger network traffic.
     public Model () {
     }
 
     public Model.for_saving (string? newName, string? newHost, string? newPort,
                              string? newPath, string? newUser, string? newPass,
-                             bool newAuto) {
+                             bool newAuto, string newProtocol = "auto") {
         name = newName ?? "Default";
         host = newHost ?? "localhost";
         port = newPort ?? "9091";
@@ -24,13 +24,28 @@ public class Server.Model : Object {
         user = newUser ?? "";
         pass = newPass ?? "";
         auto = newAuto;
+        protocol = newProtocol;
         url = rpc_url ();
     }
 
-    public string rpc_url () {
+    public string rpc_url_for (string selected_protocol, string? selected_port = null) {
         string scheme = host.has_prefix ("https://") || host.has_prefix ("http://") ? "" : "http://";
-        string normalized_path = path.has_prefix ("/") ? path : "/" + path;
-        return "%s%s:%s%s".printf (scheme, host, port, normalized_path);
+        string effective_port = selected_port ?? port;
+        string endpoint = path;
+        if (selected_protocol == "deluge") {
+            if (endpoint == "" || endpoint == "/transmission/rpc")
+                endpoint = "/json";
+        } else if (endpoint == "" || endpoint == "/json") {
+            endpoint = "/transmission/rpc";
+        }
+        if (!endpoint.has_prefix ("/"))
+            endpoint = "/" + endpoint;
+        return "%s%s:%s%s".printf (scheme, host, effective_port, endpoint);
+    }
+
+    public string rpc_url () {
+        string selected_protocol = protocol == "auto" ? "transmission" : protocol;
+        return rpc_url_for (selected_protocol);
     }
 
     public bool equals (Model other) {
