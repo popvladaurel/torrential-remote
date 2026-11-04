@@ -3,10 +3,10 @@
   <id>com.github.popvladaurel.torrential-remote</id>
   <metadata_license>CC0-1.0</metadata_license>
   <name>Torrential Remote</name>
-  <summary>Manage remote torrent servers</summary>
+  <summary>Manage remote Transmission torrents</summary>
   <developer_name>Vlad Pop</developer_name>
   <description>
-    <p>Connect to Transmission RPC and Deluge Web servers. Automatically detect a server protocol when possible, then add torrents, monitor progress, and control remote downloads.</p>
+    <p>Connect to one or more remote Transmission servers to add torrents, monitor transfer progress, and control downloads.</p>
   </description>
   <launchable type="desktop-id">com.github.popvladaurel.torrential-remote.desktop</launchable>
   <provides><binary>com.github.popvladaurel.torrential-remote</binary></provides>

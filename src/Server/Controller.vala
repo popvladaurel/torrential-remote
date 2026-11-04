@@ -47,7 +47,6 @@ class Server.Controller : Object {
                 existing.path = server.path;
                 existing.user = server.user;
                 existing.pass = server.pass;
-                existing.protocol = server.protocol;
                 existing.auto = server.auto;
                 if (server.is_default) {
                     foreach (Server.Model item in servers)
@@ -114,7 +113,6 @@ class Server.Controller : Object {
                 if (data.has_member ("pass")) server.pass = data.get_string_member ("pass");
                 if (data.has_member ("url")) server.url = data.get_string_member ("url");
                 if (data.has_member ("sessionId")) server.sessionId = data.get_string_member ("sessionId");
-                if (data.has_member ("protocol")) server.protocol = data.get_string_member ("protocol");
                 if (data.has_member ("is_default")) server.is_default = data.get_boolean_member ("is_default");
                 servers.add (server);
             }

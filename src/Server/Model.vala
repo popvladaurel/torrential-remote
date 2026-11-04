@@ -8,8 +8,6 @@ public class Server.Model : Object {
     public bool auto { get; set; default = false; }
     public string url { get; set; default = ""; }
     public string sessionId { get; set; default = ""; }
-    // auto | transmission | deluge
-    public string protocol { get; set; default = "auto"; }
     public bool is_default { get; set; default = false; }
 
     public Model () {
@@ -17,7 +15,7 @@ public class Server.Model : Object {
 
     public Model.for_saving (string? newName, string? newHost, string? newPort,
                              string? newPath, string? newUser, string? newPass,
-                             bool newAuto, string newProtocol = "auto") {
+                             bool newAuto) {
         name = newName ?? "Default";
         host = newHost ?? "localhost";
         port = newPort ?? "9091";
@@ -25,28 +23,17 @@ public class Server.Model : Object {
         user = newUser ?? "";
         pass = newPass ?? "";
         auto = newAuto;
-        protocol = newProtocol;
         url = rpc_url ();
     }
 
-    public string rpc_url_for (string selected_protocol, string? selected_port = null) {
+    public string rpc_url () {
         string scheme = host.has_prefix ("https://") || host.has_prefix ("http://") ? "" : "http://";
-        string effective_port = selected_port ?? port;
         string endpoint = path;
-        if (selected_protocol == "deluge") {
-            if (endpoint == "" || endpoint == "/transmission/rpc")
-                endpoint = "/json";
-        } else if (endpoint == "" || endpoint == "/json") {
+        if (endpoint == "" || endpoint == "/json")
             endpoint = "/transmission/rpc";
-        }
         if (!endpoint.has_prefix ("/"))
             endpoint = "/" + endpoint;
-        return "%s%s:%s%s".printf (scheme, host, effective_port, endpoint);
-    }
-
-    public string rpc_url () {
-        string selected_protocol = protocol == "auto" ? "transmission" : protocol;
-        return rpc_url_for (selected_protocol);
+        return "%s%s:%s%s".printf (scheme, host, port, endpoint);
     }
 
     public bool equals (Model other) {

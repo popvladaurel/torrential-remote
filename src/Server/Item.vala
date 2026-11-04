@@ -11,11 +11,9 @@ public class Server.Item : Granite.Widgets.SourceList.Item {
     }
 
     public void update_label () {
-        string kind = server.protocol == "auto" ? "Auto" :
-            (server.protocol == "deluge" ? "Deluge" : "Transmission");
         name = server.is_default
-            ? "%s · %s · Default".printf (server.name, kind)
-            : "%s · %s".printf (server.name, kind);
+            ? "%s · Default".printf (server.name)
+            : server.name;
     }
 
     public override Gtk.Menu? get_context_menu () {
