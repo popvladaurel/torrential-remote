@@ -11,19 +11,15 @@ public class Client.View : Gtk.ListBox {
         activate_on_single_click = false;
         button_press_event.connect (on_button_press);
         popup_menu.connect (on_popup_menu);
-        refresh_now ();
+        refresh ();
         refresh_source = Timeout.add_seconds (2, () => {
-            refresh_now ();
+            refresh ();
             return true;
         });
         destroy.connect (() => {
             if (refresh_source != 0)
                 Source.remove (refresh_source);
         });
-    }
-
-    public void refresh_now () {
-        refresh ();
     }
 
     private void refresh () {
@@ -34,24 +30,25 @@ public class Client.View : Gtk.ListBox {
             seen.add (torrent.id);
             Torrent.Row? row = find_row (torrent.id);
             if (row == null) {
-                Torrent.Row new_row = new Torrent.Row (torrent);
-                new_row.pause.clicked.connect (() => {
-                    bool success = new_row.status == Torrent.Statuses.STOPPED
-                        ? client.resume ((int) new_row.id)
-                        : client.pause ((int) new_row.id);
+                row = new Torrent.Row (torrent);
+                row.pause.clicked.connect (() => {
+                    bool success = row.status == Torrent.Statuses.STOPPED
+                        ? client.resume ((int) row.id)
+                        : client.pause ((int) row.id);
                     if (!success)
                         show_error (client.last_error);
                     else
-                        refresh_now ();
+                        refresh ();
                 });
-                rows.add (new_row);
-                add (new_row);
-                new_row.show_all ();
+                rows.add (row);
+                add (row);
+                row.show_all ();
             } else {
                 row.update_torrent (torrent);
             }
         }
 
+        // Drop rows removed on the server instead of leaving stale entries.
         foreach (Torrent.Row row in rows.to_array ()) {
             if (!seen.contains ((int) row.id)) {
                 remove (row);
@@ -88,7 +85,7 @@ public class Client.View : Gtk.ListBox {
                 return;
             }
         }
-        refresh_now ();
+        refresh ();
     }
 
     private bool on_popup_menu () {
@@ -106,7 +103,7 @@ public class Client.View : Gtk.ListBox {
                     return;
                 }
             }
-            refresh_now ();
+            refresh ();
         });
         menu.append (pause_item);
 
@@ -119,7 +116,7 @@ public class Client.View : Gtk.ListBox {
                     return;
                 }
             }
-            refresh_now ();
+            refresh ();
         });
         menu.append (resume_item);
 
