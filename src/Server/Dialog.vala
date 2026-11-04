@@ -65,7 +65,7 @@ public class Server.Dialog : Granite.MessageDialog {
 
         if (run () == Gtk.ResponseType.ACCEPT) {
             string chosen_protocol = protocol_entry.active_id ?? "auto";
-            string chosen_port = port_entry.value_as_int == 0 ? "9091" : port_entry.value_as_int.to_string ();
+            string chosen_port = port_entry.get_value_as_int() == 0 ? "9091" : port_entry.get_value_as_int().to_string ();
             string chosen_path = path_entry.text.strip ();
             if (chosen_protocol == "auto" && chosen_path == "")
                 chosen_path = "/transmission/rpc";

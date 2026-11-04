@@ -22,7 +22,7 @@ public class Client.View : Gtk.ListBox {
         });
     }
 
-    private void refresh () {
+    public void refresh () {
         Json.Array torrents = client.all ();
         Gee.HashSet<int> seen = new Gee.HashSet<int> ();
         foreach (Json.Node node in torrents.get_elements ()) {

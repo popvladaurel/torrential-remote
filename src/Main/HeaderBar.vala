@@ -101,7 +101,7 @@ public class Main.HeaderBar : Gtk.HeaderBar {
                 if (!client.add_from_file (contents))
                     show_error (client.last_error);
                 else
-                    window.torrents.refresh_now ();
+                    window.torrents.refresh ();
             } catch (Error error) {
                 show_error (error.message);
             }
@@ -137,7 +137,7 @@ public class Main.HeaderBar : Gtk.HeaderBar {
             if (!client.add_from_magnet (entry.text.strip ()))
                 show_error (client.last_error);
             else
-                window.torrents.refresh_now ();
+                window.torrents.refresh ();
         }
         dialog.destroy ();
     }
