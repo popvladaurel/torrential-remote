@@ -32,11 +32,24 @@ public class Main.HeaderBar : Gtk.HeaderBar {
         statusFilter.notify["selected"].connect (apply_filter);
         set_custom_title (statusFilter);
 
+        Granite.ModeSwitch toggle = new Granite.ModeSwitch.from_icon_name("display-brightness-symbolic", "weather-clear-night-symbolic");
+        toggle.bind_property ("active", window, "dark_theme");
+        toggle.active = window.dark_theme;
+        toggle.primary_icon_tooltip_text = "Light theme";
+		toggle.secondary_icon_tooltip_text = "Dark theme";
+        toggle.valign = Gtk.Align.CENTER;
+        toggle.notify.connect(() => {
+            Gtk.Settings.get_default ().gtk_application_prefer_dark_theme = toggle.active;
+        });
+        pack_end(toggle);
+        
         searchEntry = new Gtk.SearchEntry ();
         searchEntry.placeholder_text = "Search Torrents";
         searchEntry.width_chars = 18;
         searchEntry.search_changed.connect (apply_filter);
         pack_end (searchEntry);
+        
+        
     }
 
     private void apply_filter () {
