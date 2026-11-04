@@ -132,7 +132,7 @@ public class Client.Model : Object {
         return request ("torrent-add", arguments) != null;
     }
 
-    public bool add_from_file (uint8[] file) {
+    public bool addFromFile (uint8[] file) {
         Json.Object arguments = new Json.Object ();
         arguments.set_string_member ("metainfo", Base64.encode (file));
         return request ("torrent-add", arguments) != null;

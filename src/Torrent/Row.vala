@@ -28,14 +28,14 @@ public class Torrent.Row : Gtk.ListBoxRow {
         title = new Gtk.Label (torrent.title ());
         title.halign = Gtk.Align.START;
         title.get_style_context ().add_class ("h3");
-        stats = new Gtk.Label ();
+        stats = new Gtk.Label ("TODO");
         stats.halign = Gtk.Align.START;
         stats.use_markup = true;
         progress = new Gtk.ProgressBar ();
         progress.hexpand = true;
         pause = new Gtk.Button ();
         pause.get_style_context ().add_class ("flat");
-        state = new Gtk.Label ();
+        state = new Gtk.Label ("TODO");
         state.halign = Gtk.Align.START;
         state.use_markup = true;
         grid.attach (icon, 0, 0, 1, 4);

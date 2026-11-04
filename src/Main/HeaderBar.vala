@@ -98,7 +98,7 @@ public class Main.HeaderBar : Gtk.HeaderBar {
                 string etag;
                 chooser.get_file ().load_contents (null, out contents, out etag);
                 Client.Model client = new Client.Model (window.selectedServer);
-                if (!client.add_from_file (contents))
+                if (!client.addFromFile (contents))
                     show_error (client.last_error);
                 else
                     window.torrents.refresh_now ();
