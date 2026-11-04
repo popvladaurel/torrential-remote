@@ -13,7 +13,7 @@ public class Main.Window : Gtk.ApplicationWindow {
 
     construct {
         settings = new Settings ("com.github.popvladaurel.torrential-remote");
-        dark_theme = settings.get_boolean ("dark-theme");
+        dark_theme = true;
         scroll = new Gtk.ScrolledWindow (null, null);
         headerBar = new Main.HeaderBar (this);
         delete_event.connect (event => before_destroy ());
@@ -61,7 +61,7 @@ public class Main.Window : Gtk.ApplicationWindow {
                 return;
             serverController.delete (selected.server);
             savedServers.remove (selected.server);
-            serverItems.remove (selected);
+            //serverItems.remove (selected);
             serversList.root.remove (selected);
             if (savedServers.size > 0 && selected.server.is_default) {
                 savedServers[0].is_default = true;

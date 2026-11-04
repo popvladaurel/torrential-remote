@@ -37,6 +37,7 @@ public class Server.Item : Granite.Widgets.SourceList.Item {
         remove.activate.connect (() => {
             Server.Controller controller = new Server.Controller ();
             controller.delete (server);
+            parent.remove(this);
         });
         menu.add (remove);
         menu.show_all ();
