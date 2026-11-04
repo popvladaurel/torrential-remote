@@ -1,106 +1,140 @@
 public class Client.Model : Object {
-
-    public string sessionId { get; set; }
+    public string sessionId { get; set; default = ""; }
     public string url { get; set; }
+    public string username { get; set; default = ""; }
+    public string password { get; set; default = ""; }
+    public string last_error { get; private set; default = ""; }
 
-    /* List of mandatory fields needed to render the Torrents Widget */
-    private static string[] mandatory = {
-        "id", "name", "eta", "status", "recheckProgress", "percentDone", "haveValid", "uploadedEver", "peersConnected",
-        "peersSendingToUs", "peersGettingFromUs",  "rateDownload","rateUpload", "sizeWhenDone", "files", "error", "errorString",
+    private static string[] torrent_fields = {
+        "id", "name", "eta", "status", "recheckProgress", "percentDone",
+        "haveValid", "uploadedEver", "peersConnected", "peersSendingToUs",
+        "peersGettingFromUs", "rateDownload", "rateUpload", "sizeWhenDone",
+        "files", "error", "errorString"
     };
 
-    //  private static int[] idx = {23, 42, 74, 75, 76, 77};
-
     public Model (Server.Model server) {
-        Object (
-            url: server.url,
-            sessionId: server.sessionId
-        );
+        url = server.rpc_url ();
+        username = server.user;
+        password = server.pass;
+        sessionId = server.sessionId;
+    }
+
+    /* Shared RPC path for session negotiation, authentication, and errors. */
+    private Json.Object? request (string method, Json.Object arguments) {
+        last_error = "";
+        Soup.Session session = new Soup.Session ();
+        session.authenticate.connect ((message, auth, retrying) => {
+            if (username != "" || password != "")
+                auth.authenticate (username, password);
+        });
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            Json.Object body = new Json.Object ();
+            body.set_string_member ("method", method);
+            body.set_object_member ("arguments", arguments);
+            Json.Node root = new Json.Node (Json.NodeType.OBJECT);
+            root.set_object (body);
+            Json.Generator generator = new Json.Generator ();
+            generator.set_root (root);
+            string payload = generator.to_data (null);
+
+            Soup.Message message = new Soup.Message ("POST", url);
+            if (message == null) {
+                last_error = "The Transmission RPC URL is invalid.";
+                return null;
+            }
+            message.set_request ("application/json", Soup.MemoryUse.COPY, payload.data);
+            if (sessionId != "")
+                message.request_headers.replace ("X-Transmission-Session-Id", sessionId);
+
+            uint status = session.send_message (message);
+            if (status == Soup.Status.CONFLICT) {
+                string? new_session_id = message.response_headers.get_one ("X-Transmission-Session-Id");
+                if (new_session_id == null || attempt != 0) {
+                    last_error = "Transmission rejected the RPC session. Check the server URL and credentials.";
+                    return null;
+                }
+                sessionId = new_session_id;
+                continue;
+            }
+            if (status < 200 || status >= 300) {
+                last_error = "Transmission returned HTTP %u.".printf (status);
+                return null;
+            }
+
+            try {
+                Json.Parser parser = new Json.Parser ();
+                parser.load_from_data ((string) message.response_body.flatten ().data, -1);
+                Json.Node? response_root = parser.get_root ();
+                if (response_root == null || response_root.get_node_type () != Json.NodeType.OBJECT) {
+                    last_error = "Transmission returned an invalid RPC response.";
+                    return null;
+                }
+                Json.Object response = response_root.get_object ();
+                string result = response.get_string_member ("result");
+                if (result != "success") {
+                    last_error = "Transmission RPC failed: %s".printf (result);
+                    return null;
+                }
+                return response;
+            } catch (Error error) {
+                last_error = "Could not read the Transmission response: %s".printf (error.message);
+                return null;
+            }
+        }
+        last_error = "Could not establish an RPC session with Transmission.";
+        return null;
     }
 
     public Json.Array all () {
-        Json.Array torrents = new Json.Array();
-        Soup.Session session = new Soup.Session ();
-        Soup.Message message = new Soup.Message ("POST", url);
-        Json.Node root = new Json.Node (Json.NodeType.OBJECT);
-        Json.Generator generator = new Json.Generator ();
         Json.Object arguments = new Json.Object ();
-        Json.Object body = new Json.Object ();
-        Json.Parser parser = new Json.Parser ();
-        root.set_object (body);
-        generator.set_root (root);
-
         Json.Array fields = new Json.Array ();
-        foreach (string field in mandatory) 
+        foreach (string field in torrent_fields)
             fields.add_string_element (field);
-
-        //  Json.Array ids = new Json.Array ();
-        //  foreach (int id in idx) 
-        //      ids.add_int_element (id);
-        
         arguments.set_array_member ("fields", fields);
-        //  arguments.set_array_member ("ids", ids);
-
-        body.set_string_member ("method", "torrent-get");
-        body.set_object_member ("arguments", arguments);
-        message.set_request ("text/html", Soup.MemoryUse.COPY, generator.to_data(null).data);
-        message.request_headers.append ("X-Transmission-Session-Id", sessionId);
-        session.send_message (message);
-
-        try {
-            parser.load_from_data ((string) message.response_body.flatten ().data, -1);
-        } catch (Error e) {
-            print ("Unable to parse data: %s\n", e.message);
+        Json.Object? response = request ("torrent-get", arguments);
+        if (response != null && response.has_member ("arguments")) {
+            Json.Object result = response.get_object_member ("arguments");
+            if (result.has_member ("torrents"))
+                return result.get_array_member ("torrents");
         }
-        
-        root = parser.get_root ();
-        body = root.get_object ();
-        if (body.has_member ("arguments")) {
-            arguments = body.get_object_member ("arguments");
-            if (arguments.has_member ("torrents")) {
-                torrents = arguments.get_array_member ("torrents");
-            }
-            
-        }
-
-        return torrents;
+        return new Json.Array ();
     }
 
-    public void addFromMagnet (string link) {
-        Soup.Message message = new Soup.Message ("POST", url);
-        Json.Node root = new Json.Node (Json.NodeType.OBJECT);
-        Json.Generator generator = new Json.Generator ();
-        Soup.Session session = new Soup.Session ();
+    private bool torrent_action (string method, int id) {
         Json.Object arguments = new Json.Object ();
-        Json.Object body = new Json.Object ();
-
-        root.set_object (body);
-        generator.set_root (root);
-        
-        arguments.set_string_member("filename", link);
-        body.set_string_member ("method", "torrent-add");
-        body.set_object_member ("arguments", arguments);
-        message.set_request ("text/html", Soup.MemoryUse.COPY, generator.to_data(null).data);
-        message.request_headers.append ("X-Transmission-Session-Id", sessionId);
-        session.send_message (message);
+        Json.Array ids = new Json.Array ();
+        ids.add_int_element (id);
+        arguments.set_array_member ("ids", ids);
+        return request (method, arguments) != null;
     }
 
-    public void addFromFile (uint8[] file) {
-        Soup.Message message = new Soup.Message ("POST", url);
-        Json.Node root = new Json.Node (Json.NodeType.OBJECT);
-        Json.Generator generator = new Json.Generator ();
-        Soup.Session session = new Soup.Session ();
-        Json.Object arguments = new Json.Object ();
-        Json.Object body = new Json.Object ();
+    public bool resume (int id) {
+        return torrent_action ("torrent-start", id);
+    }
 
-        root.set_object (body);
-        generator.set_root (root);
-        
-        arguments.set_string_member("metainfo", Base64.encode(file));
-        body.set_string_member ("method", "torrent-add");
-        body.set_object_member ("arguments", arguments);
-        message.set_request ("text/html", Soup.MemoryUse.COPY, generator.to_data(null).data);
-        message.request_headers.append ("X-Transmission-Session-Id", sessionId);
-        session.send_message (message);
+    public bool pause (int id) {
+        return torrent_action ("torrent-stop", id);
+    }
+
+    public bool remove (int id, bool delete_data = false) {
+        Json.Object arguments = new Json.Object ();
+        Json.Array ids = new Json.Array ();
+        ids.add_int_element (id);
+        arguments.set_array_member ("ids", ids);
+        arguments.set_boolean_member ("delete-local-data", delete_data);
+        return request ("torrent-remove", arguments) != null;
+    }
+
+    public bool add_from_magnet (string link) {
+        Json.Object arguments = new Json.Object ();
+        arguments.set_string_member ("filename", link);
+        return request ("torrent-add", arguments) != null;
+    }
+
+    public bool add_from_file (uint8[] file) {
+        Json.Object arguments = new Json.Object ();
+        arguments.set_string_member ("metainfo", Base64.encode (file));
+        return request ("torrent-add", arguments) != null;
     }
 }
