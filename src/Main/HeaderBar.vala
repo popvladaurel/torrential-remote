@@ -49,7 +49,6 @@ public class Main.HeaderBar : Gtk.HeaderBar {
             Torrent.Row torrent_row = row as Torrent.Row;
             if (torrent_row == null)
                 return false;
-
             bool matches_query = query == "" || torrent_row.title.label.casefold ().contains (query);
             bool matches_status = true;
             switch (selected_status) {
@@ -93,7 +92,6 @@ public class Main.HeaderBar : Gtk.HeaderBar {
         torrent_filter.set_filter_name ("Torrent files");
         torrent_filter.add_mime_type ("application/x-bittorrent");
         chooser.add_filter (torrent_filter);
-
         if (chooser.run () == Gtk.ResponseType.ACCEPT) {
             try {
                 uint8[] contents;
@@ -130,11 +128,9 @@ public class Main.HeaderBar : Gtk.HeaderBar {
         entry.changed.connect (() => {
             dialog.set_response_sensitive (Gtk.ResponseType.OK, entry.text.strip ().has_prefix ("magnet:?"));
         });
-
         string? clipboard_text = Gtk.Clipboard.get (Gdk.SELECTION_CLIPBOARD).wait_for_text ();
         if (clipboard_text != null && clipboard_text.has_prefix ("magnet:?"))
             entry.text = clipboard_text;
-
         dialog.show_all ();
         if (dialog.run () == Gtk.ResponseType.OK) {
             Client.Model client = new Client.Model (window.selectedServer);
