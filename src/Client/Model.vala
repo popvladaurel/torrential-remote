@@ -72,10 +72,8 @@ public class Client.Model : Object {
     private bool detect_protocol () {
         if (protocol != "auto")
             return true;
-
         last_error = "";
         Soup.Session session = new Soup.Session ();
-        Json.Array params = new Json.Array ();
         Json.Object body = new Json.Object ();
         body.set_string_member ("method", "session-get");
         body.set_object_member ("arguments", new Json.Object ());
@@ -98,8 +96,6 @@ public class Client.Model : Object {
             return true;
         }
 
-        // Deluge Web normally listens on 8112 and exposes JSON-RPC at /json.
-        // If a non-default port was supplied, try that first, then its default.
         string deluge_port = server.port;
         if (deluge_port == "" || deluge_port == "9091")
             deluge_port = "8112";
@@ -115,12 +111,6 @@ public class Client.Model : Object {
             server.port = deluge_port;
             server.path = "/json";
             server.url = url;
-            string? cookie_header = null;
-            // Deluge web uses a cookie after auth.login. If the response includes
-            // one, preserve it for subsequent RPC requests.
-            // The helper's caller normally cannot access the HTTP message; Deluge
-            // RPC installations accepting basic auth still work without it.
-            deluge_cookie = cookie_header ?? "";
             return true;
         }
         last_error = "Could not identify a Transmission RPC or Deluge Web server at this address. Check the host, port, and credentials.";
@@ -186,13 +176,12 @@ public class Client.Model : Object {
 
     private Json.Object? deluge_request (string method, Json.Array args) {
         Soup.Session session = new Soup.Session ();
-        // Authenticate first when the web session cookie is not available.
         if (deluge_cookie == "") {
             Json.Array login_params = new Json.Array ();
             login_params.add_string_element (password);
             Json.Object? login = post_json (session, url, rpc_body ("auth.login", login_params, rpc_id++));
             if (login == null || !login.has_member ("result") || login.get_null_member ("result") ||
-                login.get_boolean_member ("result") == false) {
+                !login.get_boolean_member ("result")) {
                 if (last_error == "")
                     last_error = "Deluge login failed. Check the Web UI password.";
                 return null;
@@ -212,16 +201,6 @@ public class Client.Model : Object {
         return response;
     }
 
-    private Json.Object? request (string method, Json.Object arguments) {
-        last_error = "";
-        if (!detect_protocol ())
-            return null;
-        if (protocol == "transmission")
-            return transmission_request (method, arguments);
-        last_error = "Unsupported torrent server protocol.";
-        return null;
-    }
-
     private Json.Array get_deluge_torrents () {
         Json.Array fields = new Json.Array ();
         string[] wanted = { "name", "state", "progress", "total_size", "total_done", "total_uploaded", "download_payload_rate", "upload_payload_rate", "num_peers", "eta", "files", "message" };
@@ -236,7 +215,7 @@ public class Client.Model : Object {
         if (response == null || response.get_null_member ("result"))
             return normalized;
 
-        Json.Object? torrent_map = response.get_object_member ("result");
+        Json.Object torrent_map = response.get_object_member ("result");
         foreach (string hash in torrent_map.get_members ()) {
             Json.Object info = torrent_map.get_object_member (hash);
             int id = (int) (hash.hash () & 0x7fffffff);
@@ -244,13 +223,13 @@ public class Client.Model : Object {
             Json.Object item = new Json.Object ();
             item.set_int_member ("id", id);
             item.set_string_member ("name", info.has_member ("name") ? info.get_string_member ("name") : "Torrent");
-            string state = info.has_member ("state") ? info.get_string_member ("state") : "Paused";
-            int status = 0;
-            if (state == "Checking") status = 2;
-            else if (state == "Downloading") status = 4;
-            else if (state == "Seeding") status = 6;
-            else if (state == "Queued") status = 3;
-            item.set_int_member ("status", status);
+            string state_value = info.has_member ("state") ? info.get_string_member ("state") : "Paused";
+            int status_value = 0;
+            if (state_value == "Checking") status_value = 2;
+            else if (state_value == "Downloading") status_value = 4;
+            else if (state_value == "Seeding") status_value = 6;
+            else if (state_value == "Queued") status_value = 3;
+            item.set_int_member ("status", status_value);
             item.set_double_member ("percentDone", info.has_member ("progress") ? info.get_double_member ("progress") / 100.0 : 0.0);
             item.set_double_member ("recheckProgress", 0.0);
             item.set_int_member ("eta", info.has_member ("eta") ? info.get_int_member ("eta") : -1);
@@ -264,25 +243,14 @@ public class Client.Model : Object {
             item.set_int_member ("peersGettingFromUs", 0);
             item.set_int_member ("error", 0);
             item.set_string_member ("errorString", "");
-            Json.Array file_array = new Json.Array ();
-            if (info.has_member ("files") && info.get_node_member ("files").get_node_type () == Json.NodeType.ARRAY) {
-                Json.Array original_files = info.get_array_member ("files");
-                foreach (Json.Node file_node in original_files.get_elements ()) {
-                    Json.Object f = new Json.Object ();
-                    if (file_node.get_node_type () == Json.NodeType.OBJECT && file_node.get_object ().has_member ("path"))
-                        f.set_string_member ("name", file_node.get_object ().get_string_member ("path"));
-                    else
-                        f.set_string_member ("name", "");
-                    file_array.add_object_element (f);
-                }
-            }
-            item.set_array_member ("files", file_array);
+            item.set_array_member ("files", new Json.Array ());
             normalized.add_object_element (item);
         }
         return normalized;
     }
 
     public Json.Array all () {
+        last_error = "";
         if (!detect_protocol ())
             return new Json.Array ();
         if (protocol == "deluge")
@@ -328,16 +296,19 @@ public class Client.Model : Object {
     }
 
     public bool resume (int id) {
+        last_error = "";
         if (!detect_protocol ()) return false;
         return protocol == "deluge" ? deluge_action ("core.resume_torrent", id) : torrent_action ("torrent-start", id);
     }
 
     public bool pause (int id) {
+        last_error = "";
         if (!detect_protocol ()) return false;
         return protocol == "deluge" ? deluge_action ("core.pause_torrent", id) : torrent_action ("torrent-stop", id);
     }
 
     public bool remove (int id, bool delete_data = false) {
+        last_error = "";
         if (!detect_protocol ()) return false;
         if (protocol == "deluge") return deluge_action ("core.remove_torrent", id, delete_data);
         Json.Object arguments = new Json.Object ();
@@ -349,6 +320,7 @@ public class Client.Model : Object {
     }
 
     public bool add_from_magnet (string link) {
+        last_error = "";
         if (!detect_protocol ()) return false;
         if (protocol == "deluge") {
             Json.Array args = new Json.Array ();
@@ -362,6 +334,7 @@ public class Client.Model : Object {
     }
 
     public bool add_from_file (uint8[] file, string filename = "torrent.torrent") {
+        last_error = "";
         if (!detect_protocol ()) return false;
         string encoded = Base64.encode (file);
         if (protocol == "deluge") {
@@ -375,8 +348,4 @@ public class Client.Model : Object {
         arguments.set_string_member ("metainfo", encoded);
         return transmission_request ("torrent-add", arguments) != null;
     }
-
-    // Keep the earlier public method spellings working for file-open handlers.
-    public void addFromMagnet (string link) { add_from_magnet (link); }
-    public void addFromFile (uint8[] file) { add_from_file (file); }
 }

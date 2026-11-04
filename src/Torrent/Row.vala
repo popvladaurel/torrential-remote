@@ -10,23 +10,10 @@ public class Torrent.Row : Gtk.ListBoxRow {
     public int status;
     public Torrent.Model torrent;
 
-    private Gtk.CssProvider green_progress_provider;
-    private Gtk.CssProvider red_progress_provider;
     private const string PAUSE_ICON_NAME = "media-playback-pause-symbolic";
     private const string RESUME_ICON_NAME = "media-playback-start-symbolic";
 
     public signal void torrent_removed ();
-
-    construct {
-        green_progress_provider = new Gtk.CssProvider ();
-        red_progress_provider = new Gtk.CssProvider ();
-        try {
-            green_progress_provider.load_from_data ("@define-color selected_bg_color @success_color;");
-            red_progress_provider.load_from_data ("@define-color selected_bg_color @error_color;");
-        } catch (Error error) {
-            warning ("Failed to load progress bar styles: %s", error.message);
-        }
-    }
 
     public Row (Torrent.Model torrent) {
         this.torrent = torrent;
@@ -41,14 +28,14 @@ public class Torrent.Row : Gtk.ListBoxRow {
         title = new Gtk.Label (torrent.title ());
         title.halign = Gtk.Align.START;
         title.get_style_context ().add_class ("h3");
-        stats = new Gtk.Label ();
+        stats = new Gtk.Label ("");
         stats.halign = Gtk.Align.START;
         stats.use_markup = true;
         progress = new Gtk.ProgressBar ();
         progress.hexpand = true;
         pause = new Gtk.Button ();
         pause.get_style_context ().add_class ("flat");
-        state = new Gtk.Label ();
+        state = new Gtk.Label ("");
         state.halign = Gtk.Align.START;
         state.use_markup = true;
         grid.attach (icon, 0, 0, 1, 4);
